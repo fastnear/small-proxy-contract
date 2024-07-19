@@ -1,6 +1,7 @@
 #!/bin/bash
 set -e
 
+pushd $(dirname ${BASH_SOURCE[0]})
 mkdir -p res
 
 RUSTFLAGS='-C link-arg=-s' cargo +nightly build --target wasm32-unknown-unknown --release

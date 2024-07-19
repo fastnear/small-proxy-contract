@@ -1,5 +1,4 @@
 #![allow(internal_features)]
-
 #![no_std]
 #![feature(core_intrinsics)]
 #![allow(non_snake_case)]
@@ -9,9 +8,6 @@
 pub fn on_panic(_info: &::core::panic::PanicInfo) -> ! {
     ::core::intrinsics::abort();
 }
-
-// #[global_allocator]
-// static ALLOC: wee_alloc::WeeAlloc<'_> = wee_alloc::WeeAlloc::INIT;
 
 #[allow(unused)]
 extern "C" {
@@ -81,20 +77,12 @@ extern "C" {
     // ) -> u64;
     // fn promise_and(promise_idx_ptr: u64, promise_idx_count: u64) -> u64;
     fn promise_batch_create(account_id_len: u64, account_id_ptr: u64) -> u64;
-    fn promise_batch_then(
-        promise_index: u64,
-        account_id_len: u64,
-        account_id_ptr: u64,
-    ) -> u64;
+    fn promise_batch_then(promise_index: u64, account_id_len: u64, account_id_ptr: u64) -> u64;
     // // #######################
     // // # Promise API actions #
     // // #######################
-    fn promise_batch_action_create_account( promise_index: u64);
-    fn promise_batch_action_deploy_contract(
-        promise_index: u64,
-        code_len: u64,
-        code_ptr: u64,
-    );
+    fn promise_batch_action_create_account(promise_index: u64);
+    fn promise_batch_action_deploy_contract(promise_index: u64, code_len: u64, code_ptr: u64);
     fn promise_batch_action_function_call(
         promise_index: u64,
         method_name_len: u64,
@@ -104,7 +92,7 @@ extern "C" {
         amount_ptr: u64,
         gas: u64,
     );
-    fn promise_batch_action_transfer( promise_index: u64, amount_ptr: u64);
+    fn promise_batch_action_transfer(promise_index: u64, amount_ptr: u64);
     fn promise_batch_action_stake(
         promise_index: u64,
         amount_ptr: u64,
@@ -154,7 +142,7 @@ extern "C" {
         value_ptr: u64,
         register_id: u64,
     ) -> u64;
-    fn storage_read( key_len: u64, key_ptr: u64, register_id: u64) -> u64;
+    fn storage_read(key_len: u64, key_ptr: u64, register_id: u64) -> u64;
     // fn storage_remove( key_len: u64, key_ptr: u64, register_id: u64) -> u64;
     fn storage_has_key(key_len: u64, key_ptr: u64) -> u64;
     // // ###############
@@ -164,11 +152,8 @@ extern "C" {
     // fn validator_total_stake( stake_ptr: u64);
 }
 
-
 const HASH_LEN: u64 = 32;
 const FROM_REGISTER: u64 = u64::MAX;
-
-const ERROR_NON_OWNER: &[u8] = b"Non owner";
 
 #[derive(Default, Clone, PartialEq)]
 struct HashedAccountId(pub [u8; HASH_LEN as _]);
@@ -194,12 +179,12 @@ enum ActionType {
 
 #[no_mangle]
 pub unsafe fn init() {
-    if storage_has_key(HASH_LEN, StorageKeys::OwnerId as _) == 1 {
+    if storage_has_key(1, StorageKeys::OwnerId as _) == 1 {
         panic();
     }
     predecessor_account_id(0);
     sha256(FROM_REGISTER, 0, 0);
-    storage_write(HASH_LEN, StorageKeys::OwnerId as _, HASH_LEN, 0, 0);
+    storage_write(1, StorageKeys::OwnerId as _, FROM_REGISTER, 0, 0);
 }
 
 #[no_mangle]
@@ -231,7 +216,7 @@ pub unsafe fn proxy() {
             match action_type {
                 ActionType::CreateAccount => {
                     promise_batch_action_create_account(promise_index);
-                },
+                }
                 ActionType::DeployContract => {
                     let (code_len, code_ptr) = read_buf(&mut input_ptr);
                     promise_batch_action_deploy_contract(promise_index, code_len, code_ptr);
@@ -258,12 +243,22 @@ pub unsafe fn proxy() {
                 ActionType::Stake => {
                     let amount_ptr = read_u128_ptr(&mut input_ptr);
                     let (public_key_len, public_key_ptr) = read_public_key(&mut input_ptr);
-                    promise_batch_action_stake(promise_index, amount_ptr, public_key_len, public_key_ptr);
+                    promise_batch_action_stake(
+                        promise_index,
+                        amount_ptr,
+                        public_key_len,
+                        public_key_ptr,
+                    );
                 }
                 ActionType::AddFullAccessKey => {
                     let (public_key_len, public_key_ptr) = read_public_key(&mut input_ptr);
                     let nonce = read_u64(&mut input_ptr);
-                    promise_batch_action_add_key_with_full_access(promise_index, public_key_len, public_key_ptr, nonce);
+                    promise_batch_action_add_key_with_full_access(
+                        promise_index,
+                        public_key_len,
+                        public_key_ptr,
+                        nonce,
+                    );
                 }
                 ActionType::AddFunctionCallKey => {
                     let (public_key_len, public_key_ptr) = read_public_key(&mut input_ptr);
@@ -289,7 +284,11 @@ pub unsafe fn proxy() {
                 }
                 ActionType::DeleteAccount => {
                     let (beneficiary_id_len, beneficiary_id_ptr) = read_buf(&mut input_ptr);
-                    promise_batch_action_delete_account(promise_index, beneficiary_id_len, beneficiary_id_ptr);
+                    promise_batch_action_delete_account(
+                        promise_index,
+                        beneficiary_id_len,
+                        beneficiary_id_ptr,
+                    );
                 }
             }
         }
@@ -302,14 +301,14 @@ pub unsafe fn proxy() {
 
 unsafe fn assert_owner() {
     let mut owner_id = HashedAccountId::default();
-    storage_read(HASH_LEN, StorageKeys::OwnerId as _, 0);
+    storage_read(1, StorageKeys::OwnerId as _, 0);
     read_register(0, owner_id.0.as_mut_ptr() as _);
     let mut predecessor_id = HashedAccountId::default();
     predecessor_account_id(0);
     sha256(FROM_REGISTER, 0, 0);
     read_register(0, predecessor_id.0.as_mut_ptr() as _);
     if owner_id != predecessor_id {
-        panic_utf8(ERROR_NON_OWNER.len() as _, ERROR_NON_OWNER.as_ptr() as _);
+        panic();
     }
 }
 

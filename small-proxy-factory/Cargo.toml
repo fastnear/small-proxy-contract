@@ -1,12 +1,16 @@
 [package]
-name = "small-proxy"
+name = "small-proxy-factory"
 version = "0.0.1"
 authors = ["Eugene The Dream"]
 edition = "2021"
 publish = false
+license = "MIT OR Apache-2.0"
 
 [lib]
 crate-type = ["cdylib"]
+
+[dependencies]
+near-sdk = "5.2.1"
 
 [profile.release]
 codegen-units = 1
